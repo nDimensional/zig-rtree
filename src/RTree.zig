@@ -14,7 +14,7 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
     return struct {
         const Self = @This();
 
-        pub const Error = std.mem.Allocator.Error || error{ Empty, NotFound, InvalidArea, InvalidMass };
+        pub const Error = std.mem.Allocator.Error || error{ Empty, NotFound, InvalidArea };
 
         pub const fanout = 1 << R;
         pub const N = @Type(.{ .Int = .{ .signedness = .unsigned, .bits = R } });
@@ -110,7 +110,7 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
                 node.children[i] = child;
             }
 
-            pub fn add(node: *Node, body: Body) void {
+            pub fn add(node: *Node, body: *const Body) void {
                 const node_mass: Vector = @splat(node.body.mass);
                 const body_mass: Vector = @splat(body.mass);
                 const total_mass = node_mass + body_mass;
@@ -120,7 +120,7 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
                 node.body.mass += body.mass;
             }
 
-            pub fn remove(node: *Node, body: Body) void {
+            pub fn remove(node: *Node, body: *const Body) void {
                 const total_mass: Vector = @splat(node.body.mass);
                 const body_mass: Vector = @splat(body.mass);
                 const node_mass = total_mass - body_mass;
@@ -148,7 +148,8 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
             self.tree.clearRetainingCapacity();
         }
 
-        pub fn insert(self: *Self, body: Body) Error!void {
+        pub fn insert(self: *Self, position: Point, mass: f32) Error!void {
+            const body = Body{ .position = position, .mass = mass };
             if (self.tree.items.len == 0) {
                 try self.tree.append(Node{ .body = body });
             } else {
@@ -156,11 +157,11 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
                     return Error.InvalidArea;
                 }
 
-                try self.insertNode(0, self.area, body);
+                try self.insertNode(0, self.area, &body);
             }
         }
 
-        fn insertNode(self: *Self, id: u32, area: Area, body: Body) Error!void {
+        fn insertNode(self: *Self, id: u32, area: Area, body: *const Body) Error!void {
             if (id >= self.tree.items.len) {
                 return Error.NotFound;
             }
@@ -193,7 +194,7 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
                 try self.insertNode(child, area.divide(quadrant), body);
             } else {
                 const index: u32 = @intCast(self.tree.items.len);
-                try self.tree.append(.{ .body = body });
+                try self.tree.append(.{ .body = body.* });
                 self.tree.items[id].setQuadrant(quadrant, index);
             }
         }
@@ -203,17 +204,18 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
                 return Error.Empty;
             }
 
-            const remove_root = try self.removeNode(0, self.area, .{
+            const body = Body{
                 .position = position,
                 .mass = mass,
-            });
+            };
+            const remove_root = try self.removeNode(0, self.area, &body);
 
             if (remove_root) {
                 self.tree.clearRetainingCapacity();
             }
         }
 
-        fn removeNode(self: *Self, id: u32, area: Area, body: Body) Error!bool {
+        fn removeNode(self: *Self, id: u32, area: Area, body: *const Body) Error!bool {
             if (id >= self.tree.items.len) {
                 return Error.NotFound;
             }
@@ -223,10 +225,8 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
             }
 
             if (self.tree.items[id].isEmpty()) {
-                if (self.tree.items[id].body.mass < body.mass) {
-                    return Error.InvalidMass;
-                }
-
+                const epsilon = 0.0000001;
+                std.debug.assert(self.tree.items[id].body.mass + epsilon >= body.mass);
                 return true;
             }
 
@@ -334,6 +334,6 @@ test "cellFromIndex / indexFromCell" {
     }
 }
 
-pub inline fn getNorm(comptime R: u3, f: @Vector(R, f32)) f32 {
+fn getNorm(f: @Vector(2, f32)) f32 {
     return std.math.sqrt(@reduce(.Add, f * f));
 }
