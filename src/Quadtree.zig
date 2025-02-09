@@ -3,10 +3,10 @@ const std = @import("std");
 const epsilon = 0.0000001;
 
 pub const Quadrant = enum(u2) {
-    ne = 0,
-    nw = 1,
     sw = 2,
+    nw = 1,
     se = 3,
+    ne = 0,
 };
 
 pub const Area = packed struct {
