@@ -1,20 +1,12 @@
 const std = @import("std");
 
-/// The Context type must have a function
-/// ```
-/// pub fn getForce(
-///     self: Context,
-///     a_position: @Vector(R, f32),
-///     a_mass: f32,
-///     b_position: @Vector(R, f32),
-///     b_mass: f32,
-/// ) @Vector(R, f32)
-/// ```
-pub fn RTree(comptime R: u3, comptime Context: type) type {
+const epsilon = 0.0000001;
+
+pub fn RTree(comptime R: u3) type {
     return struct {
         const Self = @This();
 
-        pub const Error = std.mem.Allocator.Error || error{ Empty, NotFound, InvalidArea };
+        pub const Error = std.mem.Allocator.Error || error{ Empty, OutOfBounds };
 
         pub const fanout = 1 << R;
         pub const N = @Type(.{ .Int = .{ .signedness = .unsigned, .bits = R } });
@@ -26,10 +18,10 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
         pub const Vector = @Vector(R, f32);
         pub const Point = @Vector(R, f32);
 
-        pub const Quadrant = @Vector(R, bool);
+        pub const Cell = @Vector(R, bool);
 
-        pub fn cellFromIndex(n: N) Quadrant {
-            var q: Quadrant = @splat(false);
+        pub fn cellFromIndex(n: N) Cell {
+            var q: Cell = @splat(false);
             inline for (0..R) |i| {
                 const needle = (1 << (R - 1 - i));
                 const bit = n & needle;
@@ -39,7 +31,7 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
             return q;
         }
 
-        pub fn indexFromCell(q: Quadrant) N {
+        pub fn indexFromCell(q: Cell) N {
             var n: N = 0;
             inline for (0..R) |i| {
                 if (q[i]) {
@@ -55,18 +47,17 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
             s: f32 = 0,
             c: Point = @splat(0),
 
-            pub fn locate(area: Area, point: Point) Quadrant {
+            pub fn locate(area: Area, point: Point) Cell {
                 return area.c <= point;
             }
 
-            pub fn divide(area: Area, quadrant: Quadrant) Area {
+            pub fn divide(area: Area, quadrant: Cell) Area {
                 const s = area.s / 2;
                 const d = s / 2;
 
                 var delta: Vector = @splat(0);
-                inline for (0..R) |i| {
+                inline for (0..R) |i|
                     delta[i] = if (quadrant[i]) d else -d;
-                }
 
                 return .{ .s = s, .c = area.c + delta };
             }
@@ -100,12 +91,12 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
                 return true;
             }
 
-            pub inline fn getQuadrant(node: Node, quadrant: Quadrant) u32 {
+            pub inline fn getQuadrant(node: Node, quadrant: Cell) u32 {
                 const i = indexFromCell(quadrant);
                 return node.children[i];
             }
 
-            pub inline fn setQuadrant(node: *Node, quadrant: Quadrant, child: u32) void {
+            pub inline fn setQuadrant(node: *Node, quadrant: Cell, child: u32) void {
                 const i = indexFromCell(quadrant);
                 node.children[i] = child;
             }
@@ -136,7 +127,10 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
         threshold: f32 = 0.5,
 
         pub fn init(allocator: std.mem.Allocator, area: Area) Self {
-            return .{ .tree = std.ArrayList(Node).init(allocator), .area = area };
+            return .{
+                .area = area,
+                .tree = std.ArrayList(Node).init(allocator),
+            };
         }
 
         pub fn deinit(self: Self) void {
@@ -149,26 +143,20 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
         }
 
         pub fn insert(self: *Self, position: Point, mass: f32) Error!void {
+            if (!self.area.contains(position))
+                return Error.OutOfBounds;
+
             const body = Body{ .position = position, .mass = mass };
             if (self.tree.items.len == 0) {
                 try self.tree.append(Node{ .body = body });
             } else {
-                if (self.area.s == 0) {
-                    return Error.InvalidArea;
-                }
-
                 try self.insertNode(0, self.area, &body);
             }
         }
 
         fn insertNode(self: *Self, id: u32, area: Area, body: *const Body) Error!void {
-            if (id >= self.tree.items.len) {
-                return Error.NotFound;
-            }
-
-            if (area.s == 0) {
-                return Error.InvalidArea;
-            }
+            std.debug.assert(id < self.tree.items.len);
+            std.debug.assert(area.s > 0);
 
             if (self.tree.items[id].isEmpty()) {
                 const node = self.tree.items[id];
@@ -200,49 +188,36 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
         }
 
         pub fn remove(self: *Self, position: Point, mass: f32) Error!void {
-            if (self.tree.items.len == 0) {
+            if (self.tree.items.len == 0)
                 return Error.Empty;
-            }
 
-            const body = Body{
-                .position = position,
-                .mass = mass,
-            };
+            if (!self.area.contains(position))
+                return Error.OutOfBounds;
+
+            const body = Body{ .position = position, .mass = mass };
             const remove_root = try self.removeNode(0, self.area, &body);
-
-            if (remove_root) {
+            if (remove_root)
                 self.tree.clearRetainingCapacity();
-            }
         }
 
         fn removeNode(self: *Self, id: u32, area: Area, body: *const Body) Error!bool {
-            if (id >= self.tree.items.len) {
-                return Error.NotFound;
-            }
-
-            if (area.s == 0) {
-                return Error.InvalidArea;
-            }
+            std.debug.assert(area.s > 0);
+            std.debug.assert(id < self.tree.items.len);
 
             if (self.tree.items[id].isEmpty()) {
-                const epsilon = 0.0000001;
-                std.debug.assert(self.tree.items[id].body.mass + epsilon >= body.mass);
+                self.tree.items[id].body.mass -= body.mass;
+                std.debug.assert(@abs(self.tree.items[id].body.mass) < epsilon);
                 return true;
             }
 
             const quadrant = area.locate(body.position);
             const child = self.tree.items[id].getQuadrant(quadrant);
             const remove_child = try self.removeNode(child, area.divide(quadrant), body);
-            if (remove_child) {
+            if (remove_child)
                 self.tree.items[id].setQuadrant(quadrant, Node.NULL);
-            }
 
             self.tree.items[id].remove(body);
-            if (self.tree.items[id].isEmpty()) {
-                return true;
-            }
-
-            return false;
+            return self.tree.items[id].isEmpty();
         }
 
         pub fn getTotalMass(self: Self) f32 {
@@ -253,19 +228,27 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
             }
         }
 
-        pub fn getForce(self: Self, ctx: Context, position: Point, mass: f32) !Vector {
+        /// The Context type must have a function
+        /// ```
+        /// pub fn getForce(
+        ///     self: Context,
+        ///     a_position: @Vector(R, f32),
+        ///     a_mass: f32,
+        ///     b_position: @Vector(R, f32),
+        ///     b_mass: f32,
+        /// ) @Vector(R, f32)
+        /// ```
+        pub fn getForce(self: Self, ctx: anytype, position: Point, mass: f32) Vector {
             if (self.tree.items.len == 0)
                 return @as(Vector, @splat(0));
 
-            return try self.getForceNode(ctx, 0, self.area.s, &.{
-                .position = position,
-                .mass = mass,
-            });
+            const body = Body{ .position = position, .mass = mass };
+            return self.getForceNode(ctx, 0, self.area.s, &body);
         }
 
-        fn getForceNode(self: Self, ctx: Context, id: u32, s: f32, body: *const Body) !Vector {
+        fn getForceNode(self: Self, ctx: anytype, id: u32, s: f32, body: *const Body) Vector {
             if (id >= self.tree.items.len)
-                return Error.NotFound;
+                @panic("index out of range");
 
             const node = self.tree.items[id];
             if (node.isEmpty())
@@ -281,7 +264,7 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
             var f: Vector = @splat(0);
             inline for (node.children) |child| {
                 if (child != Node.NULL) {
-                    f += try self.getForceNode(ctx, child, s / 2, body);
+                    f += self.getForceNode(ctx, child, s / 2, body);
                 }
             }
 
@@ -293,8 +276,7 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
         }
 
         fn printNode(self: *Self, log: std.fs.File.Writer, id: u32, depth: usize) !void {
-            if (id >= self.tree.items.len)
-                return Error.NotFound;
+            std.debug.assert(id < self.tree.items.len);
 
             const node = self.tree.items[id];
             if (node.isEmpty()) {
@@ -326,14 +308,10 @@ pub fn RTree(comptime R: u3, comptime Context: type) type {
 }
 
 test "cellFromIndex / indexFromCell" {
-    const Tree = RTree(2, struct {});
+    const Tree = RTree(2);
 
     inline for (0..Tree.fanout) |i| {
         const cell = Tree.cellFromIndex(i);
         try std.testing.expectEqual(i, Tree.indexFromCell(cell));
     }
-}
-
-fn getNorm(f: @Vector(2, f32)) f32 {
-    return std.math.sqrt(@reduce(.Add, f * f));
 }
