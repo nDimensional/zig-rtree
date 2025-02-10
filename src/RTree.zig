@@ -1,6 +1,7 @@
 const std = @import("std");
 const utils = @import("utils.zig");
-const Force = @import("Force.zig");
+
+pub const Force = @import("Force.zig");
 
 pub const Options = struct {
     /// threshold for large-body approximation

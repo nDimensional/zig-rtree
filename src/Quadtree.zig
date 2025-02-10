@@ -1,7 +1,7 @@
 const std = @import("std");
 const utils = @import("utils.zig");
 
-const Force = @import("Force.zig");
+pub const Force = @import("Force.zig");
 
 pub const Quadrant = enum(u2) {
     sw = 0,
