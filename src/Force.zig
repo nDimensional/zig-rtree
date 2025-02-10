@@ -49,10 +49,10 @@ pub fn getForce(
 
     var f = self.c * a_mass * b_mass;
     switch (self.exp) {
-        .sqrt => f /= std.math.sqrt(dist),
-        .linear => f /= dist,
-        .square => f /= dist * dist,
-        .custom => |r| f *= std.math.pow(f32, dist, r),
+        .sqrt => f /= std.math.sqrt(dist) * dist,
+        .linear => f /= 1,
+        .square => f /= dist,
+        .custom => |r| f *= std.math.pow(f32, dist, r) / dist,
     }
 
     return delta * @as(@Vector(R, f32), @splat(f));
