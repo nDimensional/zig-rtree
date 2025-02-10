@@ -1,6 +1,12 @@
 const std = @import("std");
+const utils = @import("utils.zig");
+const Force = @import("Force.zig");
 
-const epsilon = 0.0000001;
+pub const Options = struct {
+    /// threshold for large-body approximation
+    threshold: f32 = 0.5,
+    force: Force = .{},
+};
 
 pub fn RTree(comptime R: u3) type {
     return struct {
@@ -43,7 +49,7 @@ pub fn RTree(comptime R: u3) type {
             return n;
         }
 
-        pub const Area = struct {
+        pub const Area = packed struct {
             s: f32 = 0,
             c: Point = @splat(0),
 
@@ -124,12 +130,15 @@ pub fn RTree(comptime R: u3) type {
 
         area: Area,
         tree: std.ArrayList(Node),
-        threshold: f32 = 0.5,
+        force: Force,
+        threshold: f32,
 
-        pub fn init(allocator: std.mem.Allocator, area: Area) Self {
+        pub fn init(allocator: std.mem.Allocator, area: Area, options: Options) Self {
             return .{
                 .area = area,
                 .tree = std.ArrayList(Node).init(allocator),
+                .threshold = options.threshold,
+                .force = options.force,
             };
         }
 
@@ -206,7 +215,7 @@ pub fn RTree(comptime R: u3) type {
 
             if (self.tree.items[id].isEmpty()) {
                 self.tree.items[id].body.mass -= body.mass;
-                std.debug.assert(@abs(self.tree.items[id].body.mass) < epsilon);
+                std.debug.assert(@abs(self.tree.items[id].body.mass) < utils.epsilon);
                 return true;
             }
 
@@ -228,43 +237,38 @@ pub fn RTree(comptime R: u3) type {
             }
         }
 
-        /// The Context type must have a function
-        /// ```
-        /// pub fn getForce(
-        ///     self: Context,
-        ///     a_position: @Vector(R, f32),
-        ///     a_mass: f32,
-        ///     b_position: @Vector(R, f32),
-        ///     b_mass: f32,
-        /// ) @Vector(R, f32)
-        /// ```
-        pub fn getForce(self: Self, ctx: anytype, position: Point, mass: f32) Vector {
+        pub inline fn setThreshold(self: Self, threshold: f32) void {
+            self.threshold = threshold;
+        }
+
+        pub inline fn setForceParams(self: Self, params: Force.Params) void {
+            self.force = Force.create(params);
+        }
+
+        pub fn getForce(self: Self, position: Point, mass: f32) Vector {
             if (self.tree.items.len == 0)
                 return @as(Vector, @splat(0));
 
             const body = Body{ .position = position, .mass = mass };
-            return self.getForceNode(ctx, 0, self.area.s, &body);
+            return self.getForceNode(0, self.area.s, &body);
         }
 
-        fn getForceNode(self: Self, ctx: anytype, id: u32, s: f32, body: *const Body) Vector {
+        fn getForceNode(self: Self, id: u32, s: f32, body: *const Body) Vector {
             if (id >= self.tree.items.len)
                 @panic("index out of range");
 
             const node = self.tree.items[id];
             if (node.isEmpty())
-                return ctx.getForce(body.position, body.mass, node.body.position, node.body.mass);
+                return self.force.getForce(R, body.position, body.mass, node.body.position, node.body.mass);
 
-            const delta = node.body.position - body.position;
-            const norm = @reduce(.Add, delta * delta);
-            const d = std.math.sqrt(norm);
-
+            const d = utils.getNorm(R, node.body.position - body.position);
             if (s / d < self.threshold)
-                return ctx.getForce(body.position, body.mass, node.body.position, node.body.mass);
+                return self.force.getForce(R, body.position, body.mass, node.body.position, node.body.mass);
 
             var f: Vector = @splat(0);
             inline for (node.children) |child| {
                 if (child != Node.NULL) {
-                    f += self.getForceNode(ctx, child, s / 2, body);
+                    f += self.getForceNode(child, s / 2, body);
                 }
             }
 

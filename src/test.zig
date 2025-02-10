@@ -2,10 +2,7 @@ const std = @import("std");
 
 const Quadtree = @import("Quadtree.zig").Quadtree;
 const RTree = @import("RTree.zig").RTree;
-
-fn getNorm(comptime R: u3, f: @Vector(R, f32)) f32 {
-    return std.math.sqrt(@reduce(.Add, f * f));
-}
+const utils = @import("utils.zig");
 
 fn Context(comptime R: u3) type {
     return struct {
@@ -21,8 +18,7 @@ fn Context(comptime R: u3) type {
             b_mass: f32,
         ) @Vector(R, f32) {
             const delta = b_position - a_position;
-
-            const dist = getNorm(R, delta);
+            const dist = utils.getNorm(R, delta);
             if (dist == 0) {
                 return @splat(0);
             }
@@ -50,7 +46,7 @@ test "create RTree(3)" {
 
     const Tree = RTree(3);
 
-    var rtree = Tree.init(allocator, .{ .s = s });
+    var rtree = Tree.init(allocator, .{ .s = s }, .{});
     defer rtree.deinit();
 
     var bodies = std.ArrayList(Tree.Body).init(allocator);
@@ -91,12 +87,12 @@ test "compare RTree(2) with Quadtree" {
     var prng = std.Random.Xoshiro256.init(0);
     const random = prng.random();
 
-    var quadtree = Quadtree.init(allocator, .{ .s = s });
+    var quadtree = Quadtree.init(allocator, .{ .s = s }, .{});
     defer quadtree.deinit();
 
     const Tree = RTree(2);
 
-    var rtree = Tree.init(allocator, .{ .s = s });
+    var rtree = Tree.init(allocator, .{ .s = s }, .{});
     defer rtree.deinit();
 
     var bodies = std.ArrayList(Tree.Body).init(allocator);
@@ -119,16 +115,14 @@ test "compare RTree(2) with Quadtree" {
         try std.testing.expectEqual(rtree.getTotalMass(), total_mass);
     }
 
-    const ctx = Context(2){};
-
     for (0..10000) |_| {
         const x = (random.float(f32) - 0.5) * s;
         const y = (random.float(f32) - 0.5) * s;
         const mass: f32 = @floatFromInt(1 + random.uintLessThan(u32, 256));
 
         try std.testing.expectEqual(
-            quadtree.getForce(ctx, .{ x, y }, mass),
-            rtree.getForce(ctx, .{ x, y }, mass),
+            quadtree.getForce(.{ x, y }, mass),
+            rtree.getForce(.{ x, y }, mass),
         );
     }
 
@@ -152,12 +146,12 @@ test "compare RTree(3) with Quadtree" {
     var prng = std.Random.Xoshiro256.init(0);
     const random = prng.random();
 
-    var quadtree = Quadtree.init(allocator, .{ .s = s });
+    var quadtree = Quadtree.init(allocator, .{ .s = s }, .{});
     defer quadtree.deinit();
 
     const Tree = RTree(3);
 
-    var rtree = Tree.init(allocator, .{ .s = s });
+    var rtree = Tree.init(allocator, .{ .s = s }, .{});
     defer rtree.deinit();
 
     var bodies = std.ArrayList(@Vector(3, f32)).init(allocator);
@@ -180,16 +174,13 @@ test "compare RTree(3) with Quadtree" {
         try std.testing.expectEqual(rtree.getTotalMass(), total_mass);
     }
 
-    const ctx2 = Context(2){};
-    const ctx3 = Context(3){};
-
     for (0..10000) |_| {
         const x = (random.float(f32) - 0.5) * s;
         const y = (random.float(f32) - 0.5) * s;
         const mass: f32 = @floatFromInt(1 + random.uintLessThan(u32, 256));
 
-        const a = quadtree.getForce(ctx2, .{ x, y }, mass);
-        const b = rtree.getForce(ctx3, .{ x, y, 0 }, mass);
+        const a = quadtree.getForce(.{ x, y }, mass);
+        const b = rtree.getForce(.{ x, y, 0 }, mass);
         try std.testing.expectEqual(a[0], b[0]);
         try std.testing.expectEqual(a[1], b[1]);
         try std.testing.expectEqual(b[2], 0);
