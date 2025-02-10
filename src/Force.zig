@@ -45,15 +45,18 @@ pub fn getForce(
 ) @Vector(R, f32) {
     const delta = b_position - a_position;
     const dist = utils.getNorm(R, delta);
-    if (dist == 0) return @splat(0);
+    if (dist == 0)
+        return @splat(0);
+
+    const unit = delta / @as(@Vector(R, f32), @splat(dist));
 
     var f = self.c * a_mass * b_mass;
     switch (self.exp) {
-        .sqrt => f /= std.math.sqrt(dist) * dist,
-        .linear => f /= 1,
-        .square => f /= dist,
-        .custom => |r| f *= std.math.pow(f32, dist, r) / dist,
+        .sqrt => f /= std.math.sqrt(dist),
+        .linear => f /= dist,
+        .square => f /= dist * dist,
+        .custom => |r| f *= std.math.pow(f32, dist, r),
     }
 
-    return delta * @as(@Vector(R, f32), @splat(f));
+    return unit * @as(@Vector(R, f32), @splat(f));
 }
