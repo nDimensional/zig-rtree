@@ -66,6 +66,7 @@ export fn quadtree_get_nearest_body(tree: *qt.Quadtree, position_x: f32, positio
         result_x.* = 0;
         result_y.* = 0;
         result_mass.* = 0;
+        return;
     };
 
     result_x.* = body.position[0];
