@@ -57,6 +57,18 @@ pub const Area = packed struct {
         if (point[1] < min_y or max_y < point[1]) return false;
         return true;
     }
+
+    pub fn getMinDistance(area: Area, point: @Vector(2, f32)) f32 {
+        const zero: @Vector(2, f32) = comptime @splat(0);
+        const s: @Vector(2, f32) = @splat(area.s / 2);
+        const d = @abs(point - area.c) - s;
+        return utils.getNorm(2, @max(d, zero));
+    }
+};
+
+pub const Body = packed struct {
+    position: @Vector(2, f32) = .{ 0, 0 },
+    mass: f32 = 0,
 };
 
 pub const Node = packed struct {
@@ -235,11 +247,10 @@ pub const Quadtree = struct {
     }
 
     pub fn getForce(self: Quadtree, position: @Vector(2, f32), mass: f32) @Vector(2, f32) {
-        if (self.tree.items.len == 0) {
+        if (self.tree.items.len == 0)
             return .{ 0, 0 };
-        } else {
-            return self.getForceNode(0, self.area.s, position, mass);
-        }
+
+        return self.getForceNode(0, self.area.s, position, mass);
     }
 
     fn getForceNode(self: Quadtree, id: u32, s: f32, p: @Vector(2, f32), m: f32) @Vector(2, f32) {
@@ -251,9 +262,8 @@ pub const Quadtree = struct {
             return self.force.getForce(2, p, m, node.center, node.mass);
 
         const d = utils.getNorm(2, node.center - p);
-        if (s / d < self.threshold) {
+        if (s / d < self.threshold)
             return self.force.getForce(2, p, m, node.center, node.mass);
-        }
 
         const s2 = s / 2;
         var f = @Vector(2, f32){ 0, 0 };
@@ -265,41 +275,78 @@ pub const Quadtree = struct {
         return f;
     }
 
+    pub fn getNearestBody(self: Quadtree, position: @Vector(2, f32)) !Body {
+        if (self.tree.items.len == 0)
+            return error.Empty;
+
+        var nearest = Body{};
+        var neartest_dist = std.math.inf(f32);
+        self.getNearestBodyNode(0, self.area, position, &nearest, &neartest_dist);
+        return nearest;
+    }
+
+    fn getNearestBodyNode(
+        self: Quadtree,
+        id: u32,
+        area: Area,
+        position: @Vector(2, f32),
+        nearest: *Body,
+        nearest_dist: *f32,
+    ) void {
+        if (id >= self.tree.items.len)
+            @panic("index out of range");
+
+        const node = self.tree.items[id];
+
+        if (node.isEmpty()) {
+            const dist = utils.getNorm(2, node.center - position);
+            if (dist < nearest_dist.*) {
+                nearest.position = node.center;
+                nearest.mass = node.mass;
+                nearest_dist.* = dist;
+            }
+        } else if (area.getMinDistance(position) < nearest_dist.*) {
+            if (node.sw != Node.NULL)
+                self.getNearestBodyNode(node.sw, area.divide(.sw), position, nearest, nearest_dist);
+            if (node.nw != Node.NULL)
+                self.getNearestBodyNode(node.nw, area.divide(.nw), position, nearest, nearest_dist);
+            if (node.se != Node.NULL)
+                self.getNearestBodyNode(node.se, area.divide(.se), position, nearest, nearest_dist);
+            if (node.ne != Node.NULL)
+                self.getNearestBodyNode(node.ne, area.divide(.ne), position, nearest, nearest_dist);
+        }
+    }
+
     pub fn print(self: *Quadtree, log: std.fs.File.Writer) !void {
         try self.printNode(log, 0, 1);
     }
 
     fn printNode(self: *Quadtree, log: std.fs.File.Writer, id: u32, depth: usize) !void {
-        if (id >= self.tree.items.len) {
+        if (id >= self.tree.items.len)
             @panic("index out of range");
-        }
 
         const node = self.tree.items[id];
 
-        if (node.idx == 0) {
-            try log.print("node {d}\n", .{id});
-            if (node.sw != Node.NULL) {
-                try log.writeByteNTimes(' ', depth * 2);
-                try log.print("sw: ", .{});
-                try self.printNode(log, node.sw, depth + 1);
-            }
-            if (node.nw != Node.NULL) {
-                try log.writeByteNTimes(' ', depth * 2);
-                try log.print("nw: ", .{});
-                try self.printNode(log, node.nw, depth + 1);
-            }
-            if (node.se != Node.NULL) {
-                try log.writeByteNTimes(' ', depth * 2);
-                try log.print("se: ", .{});
-                try self.printNode(log, node.se, depth + 1);
-            }
-            if (node.ne != Node.NULL) {
-                try log.writeByteNTimes(' ', depth * 2);
-                try log.print("ne: ", .{});
-                try self.printNode(log, node.ne, depth + 1);
-            }
-        } else {
-            try log.print("idx #{d}\n", .{node.idx});
+        try log.print("node {d}\n", .{id});
+        if (node.sw != Node.NULL) {
+            try log.writeByteNTimes(' ', depth * 2);
+            try log.print("sw: ", .{});
+            try self.printNode(log, node.sw, depth + 1);
+        }
+        if (node.nw != Node.NULL) {
+            try log.writeByteNTimes(' ', depth * 2);
+            try log.print("nw: ", .{});
+            try self.printNode(log, node.nw, depth + 1);
+        }
+        if (node.se != Node.NULL) {
+            try log.writeByteNTimes(' ', depth * 2);
+            try log.print("se: ", .{});
+            try self.printNode(log, node.se, depth + 1);
+        }
+        if (node.ne != Node.NULL) {
+            try log.writeByteNTimes(' ', depth * 2);
+            try log.print("ne: ", .{});
+            try self.printNode(log, node.ne, depth + 1);
         }
     }
 };
@@ -338,4 +385,34 @@ test "create and construct Quadtree" {
         total_mass -= body.mass;
         try std.testing.expectEqual(self.getTotalMass(), total_mass);
     }
+}
+
+test "getNearestBody" {
+    const s: f32 = 256;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer std.testing.expect(gpa.deinit() == .ok) catch {};
+
+    var qt = Quadtree.init(allocator, .{ .s = s }, .{});
+    defer qt.deinit();
+
+    // Test empty tree
+    try std.testing.expectError(error.Empty, qt.getNearestBody(.{ 0, 0 }));
+
+    // Insert bodies in different quadrants
+    const p1: @Vector(2, f32) = .{ 10, 10 };
+    const p2: @Vector(2, f32) = .{ 100, 100 };
+    const p3: @Vector(2, f32) = .{ -50, -50 };
+
+    try qt.insert(p1, 1);
+    try qt.insert(p2, 2);
+    try qt.insert(p3, 3);
+
+    // Test finding nearest to a point
+    const query: @Vector(2, f32) = .{ 15, 15 };
+    const nearest = try qt.getNearestBody(query);
+
+    // p1 should be nearest to the query point
+    try std.testing.expect(@reduce(.And, nearest.position == p1));
+    try std.testing.expectEqual(1, nearest.mass);
 }
