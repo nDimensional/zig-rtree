@@ -275,13 +275,14 @@ pub const Quadtree = struct {
         return f;
     }
 
-    pub fn getNearestBody(self: Quadtree, position: @Vector(2, f32)) !Body {
+    pub const NearestBodyMode = enum { inclusive, exclusive };
+    pub fn getNearestBody(self: Quadtree, position: @Vector(2, f32), mode: NearestBodyMode) !Body {
         if (self.tree.items.len == 0)
             return error.Empty;
 
         var nearest = Body{};
         var neartest_dist = std.math.inf(f32);
-        self.getNearestBodyNode(0, self.area, position, &nearest, &neartest_dist);
+        self.getNearestBodyNode(0, self.area, position, mode, &nearest, &neartest_dist);
         return nearest;
     }
 
@@ -290,6 +291,7 @@ pub const Quadtree = struct {
         id: u32,
         area: Area,
         position: @Vector(2, f32),
+        mode: NearestBodyMode,
         nearest: *Body,
         nearest_dist: *f32,
     ) void {
@@ -299,6 +301,9 @@ pub const Quadtree = struct {
         const node = self.tree.items[id];
 
         if (node.isEmpty()) {
+            if (@reduce(.And, node.center == position) and mode == .exclusive)
+                return;
+
             const dist = utils.getNorm(2, node.center - position);
             if (dist < nearest_dist.*) {
                 nearest.position = node.center;
@@ -307,13 +312,13 @@ pub const Quadtree = struct {
             }
         } else if (area.getMinDistance(position) < nearest_dist.*) {
             if (node.sw != Node.NULL)
-                self.getNearestBodyNode(node.sw, area.divide(.sw), position, nearest, nearest_dist);
+                self.getNearestBodyNode(node.sw, area.divide(.sw), position, mode, nearest, nearest_dist);
             if (node.nw != Node.NULL)
-                self.getNearestBodyNode(node.nw, area.divide(.nw), position, nearest, nearest_dist);
+                self.getNearestBodyNode(node.nw, area.divide(.nw), position, mode, nearest, nearest_dist);
             if (node.se != Node.NULL)
-                self.getNearestBodyNode(node.se, area.divide(.se), position, nearest, nearest_dist);
+                self.getNearestBodyNode(node.se, area.divide(.se), position, mode, nearest, nearest_dist);
             if (node.ne != Node.NULL)
-                self.getNearestBodyNode(node.ne, area.divide(.ne), position, nearest, nearest_dist);
+                self.getNearestBodyNode(node.ne, area.divide(.ne), position, mode, nearest, nearest_dist);
         }
     }
 
@@ -410,7 +415,7 @@ test "getNearestBody" {
 
     // Test finding nearest to a point
     const query: @Vector(2, f32) = .{ 15, 15 };
-    const nearest = try qt.getNearestBody(query);
+    const nearest = try qt.getNearestBody(query, .inclusive);
 
     // p1 should be nearest to the query point
     try std.testing.expect(@reduce(.And, nearest.position == p1));

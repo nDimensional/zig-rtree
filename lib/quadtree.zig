@@ -60,9 +60,23 @@ export fn quadtree_get_force(tree: *qt.Quadtree, position_x: f32, position_y: f3
     result_y.* = f[1];
 }
 
-/// Get the nearest body
-export fn quadtree_get_nearest_body(tree: *qt.Quadtree, position_x: f32, position_y: f32, result_x: *f32, result_y: *f32, result_mass: *f32) callconv(.C) void {
-    const body = tree.getNearestBody(.{ position_x, position_y }) catch {
+/// Get the nearest body (inclusive)
+export fn quadtree_get_nearest_body_inclusive(tree: *qt.Quadtree, position_x: f32, position_y: f32, result_x: *f32, result_y: *f32, result_mass: *f32) callconv(.C) void {
+    const body = tree.getNearestBody(.{ position_x, position_y }, .inclusive) catch {
+        result_x.* = std.math.nan(f32);
+        result_y.* = std.math.nan(f32);
+        result_mass.* = std.math.nan(f32);
+        return;
+    };
+
+    result_x.* = body.position[0];
+    result_y.* = body.position[1];
+    result_mass.* = body.mass;
+}
+
+/// Get the nearest body (exclusive)
+export fn quadtree_get_nearest_body_exclusive(tree: *qt.Quadtree, position_x: f32, position_y: f32, result_x: *f32, result_y: *f32, result_mass: *f32) callconv(.C) void {
+    const body = tree.getNearestBody(.{ position_x, position_y }, .exclusive) catch {
         result_x.* = std.math.nan(f32);
         result_y.* = std.math.nan(f32);
         result_mass.* = std.math.nan(f32);

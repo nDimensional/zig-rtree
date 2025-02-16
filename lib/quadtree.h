@@ -37,8 +37,11 @@ float quadtree_get_total_mass(Quadtree* tree);
 // Get the force exerted on a body
 void quadtree_get_force(Quadtree* tree, float position_x, float position_y, float mass, float* result_x, float* result_y);
 
-// Get the nearest body
-void quadtree_get_nearest_body(Quadtree* tree, float position_x, float position_y, float* result_x, float* result_y, float* result_mass);
+// Get the nearest body (inclusive)
+void quadtree_get_nearest_body_inclusive(Quadtree* tree, float position_x, float position_y, float* result_x, float* result_y, float* result_mass);
+
+// Get the nearest body (exclusive)
+void quadtree_get_nearest_body_exclusive(Quadtree* tree, float position_x, float position_y, float* result_x, float* result_y, float* result_mass);
 
 #ifdef __cplusplus
 }
