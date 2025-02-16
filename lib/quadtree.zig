@@ -59,3 +59,16 @@ export fn quadtree_get_force(tree: *qt.Quadtree, position_x: f32, position_y: f3
     result_x.* = f[0];
     result_y.* = f[1];
 }
+
+/// Get the nearest body
+export fn quadtree_get_nearest_body(tree: *qt.Quadtree, position_x: f32, position_y: f32, result_x: *f32, result_y: *f32, result_mass: *f32) callconv(.C) void {
+    const body = tree.getNearestBody(.{ position_x, position_y }) catch {
+        result_x.* = 0;
+        result_y.* = 0;
+        result_mass.* = 0;
+    };
+
+    result_x.* = body.position[0];
+    result_y.* = body.position[1];
+    result_mass.* = body.mass;
+}
