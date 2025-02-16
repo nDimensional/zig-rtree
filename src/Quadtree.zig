@@ -402,7 +402,7 @@ test "getNearestBody" {
     defer qt.deinit();
 
     // Test empty tree
-    try std.testing.expectError(error.Empty, qt.getNearestBody(.{ 0, 0 }));
+    try std.testing.expectError(error.Empty, qt.getNearestBody(.{ 0, 0 }, .inclusive));
 
     // Insert bodies in different quadrants
     const p1: @Vector(2, f32) = .{ 10, 10 };
@@ -413,11 +413,27 @@ test "getNearestBody" {
     try qt.insert(p2, 2);
     try qt.insert(p3, 3);
 
-    // Test finding nearest to a point
-    const query: @Vector(2, f32) = .{ 15, 15 };
-    const nearest = try qt.getNearestBody(query, .inclusive);
+    { // Test finding nearest to a point
+        const nearest = try qt.getNearestBody(.{ 15, 15 }, .inclusive);
 
-    // p1 should be nearest to the query point
-    try std.testing.expect(@reduce(.And, nearest.position == p1));
-    try std.testing.expectEqual(1, nearest.mass);
+        // p1 should be nearest to the query point
+        try std.testing.expect(@reduce(.And, nearest.position == p1));
+        try std.testing.expectEqual(1, nearest.mass);
+    }
+
+    { // Test finding nearest to a child, inclusive
+        const nearest = try qt.getNearestBody(.{ 10, 10 }, .inclusive);
+
+        // p1 should be nearest to the query point
+        try std.testing.expect(@reduce(.And, nearest.position == p1));
+        try std.testing.expectEqual(1, nearest.mass);
+    }
+
+    { // Test finding nearest to a child, exclusive
+        const nearest = try qt.getNearestBody(.{ 10, 10 }, .exclusive);
+
+        // p1 should be nearest to the query point
+        try std.testing.expect(@reduce(.And, nearest.position == p3));
+        try std.testing.expectEqual(3, nearest.mass);
+    }
 }
