@@ -75,6 +75,13 @@ pub fn RTree(comptime R: u3) type {
                 const max = area.c + s;
                 return @reduce(.And, min <= point) and @reduce(.And, point <= max);
             }
+
+            pub fn getMinDistance(area: Area, point: Point) f32 {
+                const zero: Vector = comptime @splat(0);
+                const s: Vector = @splat(area.s / 2);
+                const d = @abs(point - area.c) - s;
+                return utils.getNorm(2, @max(d, zero));
+            }
         };
 
         pub const Body = packed struct {
@@ -268,12 +275,52 @@ pub fn RTree(comptime R: u3) type {
 
             var f: Vector = @splat(0);
             inline for (node.children) |child| {
-                if (child != Node.NULL) {
+                if (child == Node.NULL) {
                     f += self.getForceNode(child, s / 2, body);
                 }
             }
 
             return f;
+        }
+
+        pub fn getNearestBody(self: Self, position: Point) !Body {
+            if (self.tree.items.len == 0)
+                return error.Empty;
+
+            var nearest = Body{};
+            var neartest_dist = std.math.inf(f32);
+            self.getNearestBodyNode(0, self.area, position, &nearest, &neartest_dist);
+            return nearest;
+        }
+
+        fn getNearestBodyNode(
+            self: Self,
+            id: u32,
+            area: Area,
+            position: Point,
+            nearest: *Body,
+            nearest_dist: *f32,
+        ) void {
+            if (id >= self.tree.items.len)
+                @panic("index out of range");
+
+            const node = self.tree.items[id];
+
+            if (node.isEmpty()) {
+                const dist = utils.getNorm(R, node.body.position - position);
+                if (dist < nearest_dist.*) {
+                    nearest.position = node.body.position;
+                    nearest.mass = node.body.mass;
+                    nearest_dist.* = dist;
+                }
+            } else if (area.getMinDistance(position) < nearest_dist.*) {
+                inline for (node.children, 0..) |child, i| {
+                    if (child != Node.NULL) {
+                        const cell = cellFromIndex(@intCast(i));
+                        self.getNearestBodyNode(child, area.divide(cell), position, nearest, nearest_dist);
+                    }
+                }
+            }
         }
 
         pub fn print(self: *Self, log: std.fs.File.Writer) !void {
@@ -319,4 +366,36 @@ test "cellFromIndex / indexFromCell" {
         const cell = Tree.cellFromIndex(i);
         try std.testing.expectEqual(i, Tree.indexFromCell(cell));
     }
+}
+
+test "getNearestBody" {
+    const Tree = RTree(2);
+
+    const s: f32 = 256;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer std.testing.expect(gpa.deinit() == .ok) catch {};
+
+    var t = Tree.init(allocator, .{ .s = s }, .{});
+    defer t.deinit();
+
+    // Test empty tree
+    try std.testing.expectError(error.Empty, t.getNearestBody(.{ 0, 0 }));
+
+    // Insert bodies in different quadrants
+    const p1: @Vector(2, f32) = .{ 10, 10 };
+    const p2: @Vector(2, f32) = .{ 100, 100 };
+    const p3: @Vector(2, f32) = .{ -50, -50 };
+
+    try t.insert(p1, 1);
+    try t.insert(p2, 2);
+    try t.insert(p3, 3);
+
+    // Test finding nearest to a point
+    const query: @Vector(2, f32) = .{ 15, 15 };
+    const nearest = try t.getNearestBody(query);
+
+    // p1 should be nearest to the query point
+    try std.testing.expect(@reduce(.And, nearest.position == p1));
+    try std.testing.expectEqual(1, nearest.mass);
 }
