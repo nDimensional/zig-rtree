@@ -310,9 +310,10 @@ pub const Quadtree = struct {
                 if (dist <= e) {
                     std.log.warn(
                         "found node at node ({d}, {d}), whose distance {d} is less than epsilon from position ({d}, {d})",
-                        .{ node.center[0], node.center[1], position[0], position[1], dist },
+                        .{ node.center[0], node.center[1], dist, position[0], position[1] },
                     );
                 }
+
                 nearest.position = node.center;
                 nearest.mass = node.mass;
                 nearest_dist.* = dist;
