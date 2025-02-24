@@ -275,7 +275,7 @@ pub fn RTree(comptime R: u3) type {
 
             var f: Vector = @splat(0);
             inline for (node.children) |child| {
-                if (child == Node.NULL) {
+                if (child != Node.NULL) {
                     f += self.getForceNode(child, s / 2, body);
                 }
             }
