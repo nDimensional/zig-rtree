@@ -72,7 +72,6 @@ fn addTarget(b: *std.Build, name: []const u8, target: std.Target.Query, optimize
     const quadtree = b.modules.get("quadtree") orelse return;
     lib.root_module.addImport("quadtree", quadtree);
     lib.linker_allow_shlib_undefined = true;
-    lib.linkLibC();
 
     const artifact = b.addInstallArtifact(lib, .{ .dest_sub_path = name });
     b.getInstallStep().dependOn(&artifact.step);

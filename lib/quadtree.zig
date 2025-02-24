@@ -2,13 +2,15 @@ const std = @import("std");
 
 const qt = @import("quadtree");
 
-const allocator = std.heap.c_allocator;
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+const allocator = gpa.allocator();
 
 /// Initialize a new quadtree with given center coordinates and side length
 export fn quadtree_init(side_len: f32, center_x: f32, center_y: f32) callconv(.C) ?*qt.Quadtree {
     const area = .{ .c = .{ center_x, center_y }, .s = side_len };
+
     const tree = allocator.create(qt.Quadtree) catch return null;
-    tree.* = qt.Quadtree.init(allocator, area, .{});
+    tree.* = qt.Quadtree.init(std.heap.page_allocator, area, .{});
     return tree;
 }
 
