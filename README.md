@@ -16,7 +16,7 @@ Add the dependency to `build.zig.zon`:
 ```zig
 .{
     .dependencies = .{
-        .sqlite = .{
+        .rtree = .{
             .url = "https://github.com/nDimensional/zig-rtree/archive/refs/tags/v0.2.0.tar.gz",
             // .hash = "...",
         },
