@@ -16,7 +16,7 @@ pub fn RTree(comptime R: u3) type {
         pub const Error = std.mem.Allocator.Error || error{ Empty, OutOfBounds };
 
         pub const fanout = 1 << R;
-        pub const N = @Type(.{ .Int = .{ .signedness = .unsigned, .bits = R } });
+        pub const N = @Type(.{ .int = .{ .signedness = .unsigned, .bits = R } });
 
         comptime {
             std.debug.assert(fanout == std.math.maxInt(N) + 1);

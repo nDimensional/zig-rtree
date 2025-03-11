@@ -1,6 +1,8 @@
 .{
-    .name = "rtree",
-    .version = "0.1.0",
+    .name = .rtree,
+    .fingerprint = 0xd34ac5729afded3b,
+    .version = "0.2.0",
+    .minimum_zig_version = "0.14.0",
     .paths = .{
         "src",
         "build.zig",

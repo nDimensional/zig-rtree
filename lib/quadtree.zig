@@ -7,7 +7,7 @@ const allocator = gpa.allocator();
 
 /// Initialize a new quadtree with given center coordinates and side length
 export fn quadtree_init(side_len: f32, center_x: f32, center_y: f32) callconv(.C) ?*qt.Quadtree {
-    const area = .{ .c = .{ center_x, center_y }, .s = side_len };
+    const area = qt.Area{ .c = .{ center_x, center_y }, .s = side_len };
 
     const tree = allocator.create(qt.Quadtree) catch return null;
     tree.* = qt.Quadtree.init(std.heap.page_allocator, area, .{});
@@ -22,7 +22,7 @@ export fn quadtree_deinit(tree: *qt.Quadtree) callconv(.C) void {
 
 /// Reset the quadtree with new parameters
 export fn quadtree_reset(tree: *qt.Quadtree, side_len: f32, center_x: f32, center_y: f32) callconv(.C) void {
-    const area = .{ .c = .{ center_x, center_y }, .s = side_len };
+    const area = qt.Area{ .c = .{ center_x, center_y }, .s = side_len };
     tree.reset(area);
 }
 
